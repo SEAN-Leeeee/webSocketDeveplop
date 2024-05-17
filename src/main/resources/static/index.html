@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Chat Room</title>
+	<style>
+	</style>
+	<script>
+        let webSocket;
+
+        function connect() {
+            webSocket = new WebSocket('ws://localhost:8080/chat');
+            webSocket.onmessage = function(event) {
+                const chatBox = document.getElementById('chatBox');
+                const message = document.createElement('p');
+                message.textContent = event.data;
+                chatBox.appendChild(message);
+            };
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            webSocket.send(messageInput.value);
+            messageInput.value = '';
+        }
+
+        function keyPressEvent(e) {
+            if (e.keyCode === 13) {
+                sendMessage();
+            }
+        }
+	</script>
+</head>
+<body onload="connect()">
+<h1>Chat Room</h1>
+<div id="chatBox" style="border:1px solid black; height:300px; overflow-y:scroll;"></div>
+<input type="text" id="messageInput" style="width: calc(100% - 67px);" placeholder="Type your message here..." onkeypress="keyPressEvent(event)">
+<button onclick="sendMessage()" style="width: 50px;">Send</button>
+</body>
+</html>
