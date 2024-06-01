@@ -1,40 +1,175 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Chat Room</title>
+	<meta charset="UTF-8">
+	<title>WebSocket Chat</title>
+	<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.4.0/dist/sockjs.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 	<style>
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .chat-rooms {
+            width: 30%;
+            border-right: 1px solid #ccc;
+            padding: 10px;
+        }
+        .chat-room {
+            cursor: pointer;
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+        .chat-container {
+            width: 70%;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-header {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        .chat-inputs {
+            padding: 10px;
+            border-top: 1px solid #ccc;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .chat-inputs input[type="text"]#username {
+            width: 150px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .chat-inputs input[type="text"]#message {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: none;
+            height: 40px;
+        }
+        .chat-inputs button {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
 	</style>
-	<script>
-        let webSocket;
+</head>
+<body>
+<div class="container">
+	<div class="chat-rooms">
+		<div class="chat-room" onclick="joinRoom('chattingRoom1')">Chatting Room 1</div>
+		<div class="chat-room" onclick="joinRoom('chattingRoom2')">Chatting Room 2</div>
+	</div>
+	<div class="chat-container">
+		<div id="current-room-id" class="chat-header">Select a room</div>
+		<div id="response" class="chat-messages"></div>
+		<div class="chat-inputs">
+			<input type="text" id="username" placeholder="Enter your name">
+			<input type="text" id="message" placeholder="Enter your message">
+			<button onclick="sendMessage()">Send</button>
+		</div>
+	</div>
+</div>
 
-        function connect() {
-            webSocket = new WebSocket('ws://localhost:8080/chat');
-            webSocket.onmessage = function(event) {
-                const chatBox = document.getElementById('chatBox');
-                const message = document.createElement('p');
-                message.textContent = event.data;
-                chatBox.appendChild(message);
+<script>
+    var stompClient = null;
+    var currentRoomId = null;
+    var subscriptions = {};
+
+    function connect() {
+        var socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.connect({}, function (frame) {
+            joinRoom('chattingRoom1'); // 기본적으로 채팅방1에 연결
+        });
+    }
+
+    function joinRoom(roomId) {
+        leaveRoom(); // 기존 채팅방 나가기
+        currentRoomId = roomId;
+        subscriptions[roomId] = stompClient.subscribe('/topic/' + roomId, function (messageOutput) {
+            showMessage(JSON.parse(messageOutput.body));
+        });
+        loadMessages(roomId); // 채팅방 변경 시 메시지 로드
+        updateRoomId(roomId); // roomId 업데이트
+    }
+
+    function leaveRoom() {
+        if (currentRoomId && subscriptions[currentRoomId]) {
+            subscriptions[currentRoomId].unsubscribe(); // 기존 채팅방 구독 해지
+            delete subscriptions[currentRoomId];
+        }
+    }
+
+    function updateRoomId(roomId) {
+        document.getElementById('current-room-id').textContent = roomId;
+    }
+
+    function sendMessage() {
+        var messageContent = document.getElementById('message').value;
+        var sender = document.getElementById('username').value;
+
+        if (messageContent == '') {
+            alert("내용을 입력해주세요.");
+            return;
+        }
+
+        if ( stompClient && sender) {
+            var chatMessage = {
+                sender: sender,
+                content: messageContent,
+                type: 'CHAT'
             };
+            stompClient.send("/app/chat.sendMessage/" + currentRoomId, {}, JSON.stringify(chatMessage));
+            document.getElementById('message').value = '';
+            console.log(messageContent)
+            saveMessage(currentRoomId, chatMessage); // 메시지 저장
         }
+    }
 
-        function sendMessage() {
-            const messageInput = document.getElementById('messageInput');
-            webSocket.send(messageInput.value);
-            messageInput.value = '';
-        }
+    function showMessage(message) {
+        var response = document.getElementById('response');
+        var p = document.createElement('p');
+        p.style.wordWrap = 'break-word';
+        p.appendChild(document.createTextNode(message.sender + ": " + message.content));
+        response.appendChild(p);
+        response.scrollTop = response.scrollHeight; // 새로운 메시지가 추가될 때 스크롤을 맨 아래로
+    }
 
-        function keyPressEvent(e) {
-            if (e.keyCode === 13) {
+    function saveMessage(roomId, message) {
+        var messages = JSON.parse(localStorage.getItem(roomId)) || [];
+        messages.push(message);
+        localStorage.setItem(roomId, JSON.stringify(messages));
+    }
+
+    function loadMessages(roomId) {
+        var messages = JSON.parse(localStorage.getItem(roomId)) || [];
+        var response = document.getElementById('response');
+        response.innerHTML = ''; // 이전 메시지 초기화
+        messages.forEach(function(message) {
+            showMessage(message);
+        });
+    }
+
+    window.onload = function() {
+        connect();
+        document.getElementById('message').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
                 sendMessage();
             }
-        }
-
-	</script>
-</head>
-<body onload="connect()">
-<h1>Chat Room</h1>
-<div id="chatBox" style="border:1px solid black; height:300px; overflow-y:scroll;"></div>
-<input type="text" id="messageInput" style="width: calc(100% - 67px);" placeholder="Type your message here..." onkeypress="keyPressEvent(event)">
-<button onclick="sendMessage()" style="width: 50px;">Send</button>
+        });
+    };
+</script>
 </body>
 </html>
