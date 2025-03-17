@@ -1,4 +1,6 @@
-# webSocketDeveplop
+# webSocketDevelop
+
+강의 따라하기.
 
 v1.0 기본 웹소켓 연결 구현. 
   - 기본 채팅 화면에 내용을 입력하면 연결된 소켓 모두 메세지가 전달됨
